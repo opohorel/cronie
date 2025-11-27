@@ -131,6 +131,29 @@ int cron_set_job_security_context(entry *e, user *u ATTRIBUTE_UNUSED,
 			pam_strerror(pamh, ret), 0);
 		return -1;
 	}
+
+	/* Forward XDG_SESSION_CLASS from crontab environment to PAM
+	 * so that pam_systemd.so can use it for session classification */
+	if (pamh != NULL) {
+		char *xdg_session_class = env_get("XDG_SESSION_CLASS", e->envp);
+		if (xdg_session_class != NULL) {
+			char xdg_session_class_env[256];
+			snprintf(xdg_session_class_env, sizeof(xdg_session_class_env),
+				"XDG_SESSION_CLASS=%s", xdg_session_class);
+#ifdef HAVE_PAM_PUTENV
+			ret = pam_putenv(pamh, xdg_session_class_env);
+			if (ret != PAM_SUCCESS) {
+				log_it(e->pwd->pw_name, getpid(),
+					"WARNING: Failed to set XDG_SESSION_CLASS in PAM environment",
+					pam_strerror(pamh, ret), 0);
+			}
+#else
+			log_it(e->pwd->pw_name, getpid(),
+				"WARNING: pam_putenv not available, cannot forward XDG_SESSION_CLASS",
+				NULL, 0);
+#endif
+		}
+	}
 #endif
 
 #ifdef WITH_SELINUX
